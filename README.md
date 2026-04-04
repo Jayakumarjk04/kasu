@@ -1,11 +1,11 @@
 # Nebula AI Expense Tracker
 
-[**🔴 Live Demo Link**](https://your-deployment-link.vercel.app)
+[**🔴 Live Demo Link**](https://kasu-sooty.vercel.app/)
 
 A full-stack AI-powered expense tracking application built with Next.js, MongoDB, and Google Gemini AI for natural language expense management.
 
 ## 📸 Demo Screenshots / Video
-![Dashboard ](/public/dashboard.png)
+![Dashboard ](/public/Dashboard.png)
 ![overview](/public/overview.png)
 
 ## 🚀 Setup Instructions
