@@ -36,14 +36,8 @@ export function Topbar() {
       <header className="sticky top-0 z-40 w-full nav-header backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-16 flex items-center justify-between gap-6">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2.5 flex-shrink-0">
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,#06b6d4,#3b82f6)', boxShadow: '0 0 16px rgba(6,182,212,0.4)' }}
-            >
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-slate-900 dark:text-white text-base hidden sm:block">kasu</span>
+          <Link href="/dashboard" className="flex items-center flex-shrink-0 relative group z-50">
+            <img src="/kasu-logo.png" alt="kasu logo" className="h-20 w-auto object-contain drop-shadow-2xl -my-4 group-hover:scale-105 transition-all duration-300" />
           </Link>
 
           {/* Desktop Nav */}

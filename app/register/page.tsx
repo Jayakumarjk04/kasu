@@ -50,11 +50,8 @@ export default function RegisterPage() {
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-cyan-500/20 blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-blue-600/20 blur-[100px]" />
         
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)]" style={{ background: 'linear-gradient(135deg,#06b6d4,#3b82f6)' }}>
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-white text-xl">kasu</span>
+        <div className="relative z-10 flex items-center mb-16 justify-center group">
+          <img src="/kasu-logo.png" alt="Kasu" className="w-[350px] h-auto object-contain drop-shadow-[0_15px_30px_rgba(0,0,0,0.5)] group-hover:-translate-y-2 group-hover:scale-105 transition-all duration-500" />
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -83,11 +80,8 @@ export default function RegisterPage() {
       <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-24">
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Header */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-10">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md shadow-cyan-500/20" style={{ background: 'linear-gradient(135deg,#06b6d4,#3b82f6)' }}>
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-slate-900 dark:text-white text-xl">kasu</span>
+          <div className="lg:hidden flex items-center mb-12 justify-center relative group">
+            <img src="/kasu-logo.png" alt="Kasu" className="w-64 h-auto object-contain drop-shadow-2xl group-hover:-translate-y-1 transition-all duration-300" />
           </div>
 
           <div className="mb-8">

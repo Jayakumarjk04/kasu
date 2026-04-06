@@ -29,22 +29,8 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-[#0a0813] border-r border-white/[0.06]">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-white/[0.06]">
-        <div className="relative w-10 h-10 flex-shrink-0">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-              boxShadow: '0 0 20px rgba(124,58,237,0.45)',
-            }}
-          >
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-        </div>
-        <div>
-          <h1 className="font-bold text-base text-white tracking-tight">kasu</h1>
-          <p className="text-[11px] text-white/30">Expense Tracker</p>
-        </div>
+      <div className="flex items-center px-6 py-8 border-b border-white/[0.06] justify-center relative group">
+        <img src="/kasu-logo.png" alt="kasu logo" className="w-[85%] h-auto object-contain drop-shadow-2xl group-hover:-translate-y-1 group-hover:scale-105 transition-all duration-300" />
       </div>
 
       {/* Nav items */}
