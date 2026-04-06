@@ -67,7 +67,6 @@ export async function getExpenses(userId: string, filters: ExpenseFilters = {}) 
   } else {
     sortStage.date = sortValue;
   }
-  // Stable sort tie-breaker
   sortStage._id = 1;
 
   const page = filters.page || 1;
@@ -84,35 +83,23 @@ export async function getExpenses(userId: string, filters: ExpenseFilters = {}) 
 
 export async function createExpense(userId: string, data: Partial<IExpense>) {
   await connectDB();
-  
-  const expense = await Expense.create({
-    ...data,
-    user: new mongoose.Types.ObjectId(userId),
-  });
-  
+  const expense = await Expense.create({ ...data, user: new mongoose.Types.ObjectId(userId) });
   return expense;
 }
 
 export async function updateExpense(userId: string, expenseId: string, data: Partial<IExpense>) {
   await connectDB();
-  
   const expense = await Expense.findOneAndUpdate(
     { _id: expenseId, user: new mongoose.Types.ObjectId(userId) },
     data,
     { new: true }
   );
-  
   return expense;
 }
 
 export async function deleteExpense(userId: string, expenseId: string) {
   await connectDB();
-  
-  const result = await Expense.findOneAndDelete({
-    _id: expenseId,
-    user: new mongoose.Types.ObjectId(userId),
-  });
-  
+  const result = await Expense.findOneAndDelete({ _id: expenseId, user: new mongoose.Types.ObjectId(userId) });
   return result;
 }
 
@@ -138,70 +125,34 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
   }
   
   const userObjectId = new mongoose.Types.ObjectId(userId);
-  
-  // Category breakdown
+
+  // ── Category breakdown ─────────────────────────────────────────────────────
   const categoryBreakdown = await Expense.aggregate([
-    {
-      $match: {
-        user: userObjectId,
-        date: { $gte: startDate, $lte: endDate },
-      },
-    },
-    {
-      $group: {
-        _id: '$category',
-        total: { $sum: '$amount' },
-        count: { $sum: 1 },
-      },
-    },
+    { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: '$category', total: { $sum: '$amount' }, count: { $sum: 1 } } },
     { $sort: { total: -1 } },
   ]);
-  
-  // Total spending
   const totalSpending = categoryBreakdown.reduce((sum, cat) => sum + cat.total, 0);
-  
-  // Monthly trend (last 6 months)
+
+  // ── Monthly trend (last 6 months) ──────────────────────────────────────────
   const sixMonthsAgo = subMonths(now, 6);
   const monthlyTrend = await Expense.aggregate([
-    {
-      $match: {
-        user: userObjectId,
-        date: { $gte: sixMonthsAgo },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$date' },
-          month: { $month: '$date' },
-        },
-        total: { $sum: '$amount' },
-        count: { $sum: 1 },
-      },
-    },
+    { $match: { user: userObjectId, date: { $gte: sixMonthsAgo } } },
+    { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$amount' }, count: { $sum: 1 } } },
     { $sort: { '_id.year': 1, '_id.month': 1 } },
   ]);
-  
-  // Recent expenses
-  const recentExpenses = await Expense.find({ user: userObjectId })
-    .sort({ date: -1 })
-    .limit(5);
-  
-  // Budget status
+
+  // ── Recent expenses ────────────────────────────────────────────────────────
+  const recentExpenses = await Expense.find({ user: userObjectId }).sort({ date: -1 }).limit(5);
+
+  // ── Budget status ──────────────────────────────────────────────────────────
   const budgets = await Budget.find({ user: userObjectId, isActive: true });
   const budgetStatus = await Promise.all(
     budgets.map(async (budget) => {
       const spent = await Expense.aggregate([
-        {
-          $match: {
-            user: userObjectId,
-            category: budget.category,
-            date: { $gte: startOfMonth(now), $lte: endOfMonth(now) },
-          },
-        },
+        { $match: { user: userObjectId, category: budget.category, date: { $gte: startOfMonth(now), $lte: endOfMonth(now) } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]);
-      
       return {
         category: budget.category,
         budgetAmount: budget.amount,
@@ -211,9 +162,53 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
       };
     })
   );
-  
+
+  // ── Previous period spending (for % change) ────────────────────────────────
+  const periodMs = endDate.getTime() - startDate.getTime();
+  const prevEnd = new Date(startDate.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - periodMs);
+  const prevResult = await Expense.aggregate([
+    { $match: { user: userObjectId, date: { $gte: prevStart, $lte: prevEnd } } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const prevPeriodSpending = prevResult[0]?.total || 0;
+
+  // ── Payment method breakdown ───────────────────────────────────────────────
+  const paymentMethodRaw = await Expense.aggregate([
+    { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    { $sort: { total: -1 } },
+  ]);
+
+  // ── Spending by day of week (MongoDB $dayOfWeek: 1=Sun … 7=Sat) ───────────
+  const weekdayRaw = await Expense.aggregate([
+    { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: { $dayOfWeek: '$date' }, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]);
+  const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekdayPattern = DAY_NAMES.map((day, idx) => {
+    const found = weekdayRaw.find((d) => d._id === idx + 1);
+    return { day, total: found?.total || 0, count: found?.count || 0 };
+  });
+
+  // ── Top 5 largest transactions in period ───────────────────────────────────
+  const topExpenses = await Expense.find({ user: userObjectId, date: { $gte: startDate, $lte: endDate } })
+    .sort({ amount: -1 })
+    .limit(5)
+    .lean();
+
+  // ── KPI helpers ────────────────────────────────────────────────────────────
+  const txCount = categoryBreakdown.reduce((s, c) => s + c.count, 0);
+  const avgPerTransaction = txCount > 0 ? totalSpending / txCount : 0;
+  const dayCount = Math.max(1, Math.round(periodMs / 86400000));
+  const dailyAverage = totalSpending / dayCount;
+
   return {
     totalSpending,
+    prevPeriodSpending,
+    avgPerTransaction,
+    dailyAverage,
     categoryBreakdown: categoryBreakdown.map(cat => ({
       category: cat._id,
       total: cat.total,
@@ -225,6 +220,14 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
       total: item.total,
       count: item.count,
     })),
+    paymentMethodBreakdown: paymentMethodRaw.map(p => ({
+      method: p._id,
+      total: p.total,
+      count: p.count,
+      percentage: Math.round((p.total / totalSpending) * 100) || 0,
+    })),
+    weekdayPattern,
+    topExpenses,
     recentExpenses,
     budgetStatus,
     period,
@@ -245,6 +248,5 @@ export async function exportToCSV(userId: string, filters: ExpenseFilters = {}) 
   ]);
   
   const csv = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
-  
   return csv;
 }

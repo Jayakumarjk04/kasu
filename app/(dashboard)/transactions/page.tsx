@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, Edit, Loader2, ArrowDownRight, ChevronLeft, ChevronRight, Search, FileText } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Trash2, Edit, Loader2, ChevronLeft, ChevronRight, Search, FileText, List, CalendarDays, ChevronDown, ChevronUp, TrendingDown } from 'lucide-react';
+import { format, parse } from 'date-fns';
 import { CATEGORIES, CATEGORY_COLORS, CATEGORY_ICONS, Category } from '@/lib/categories';
 import { useCurrency } from '@/lib/context/AuthContext';
 import { cn } from '@/lib/utils';
@@ -20,43 +20,78 @@ const inCls = "h-10 border-0 rounded-xl bg-white border border-slate-200 text-sl
 const scCls = "bg-white border-slate-200 dark:bg-[#0a1628] dark:border-cyan-500/15";
 const scItemCls = "text-slate-700 focus:bg-slate-100 dark:text-white/70 dark:focus:bg-cyan-500/15 rounded-lg";
 
+// ── Monthly grouping helper ──────────────────────────────────────────────────
+interface MonthGroup {
+  key: string;        // e.g. "2026-04"
+  label: string;      // e.g. "April 2026"
+  expenses: Expense[];
+  total: number;
+  topCategory: string;
+}
+
+function groupByMonth(expenses: Expense[]): MonthGroup[] {
+  const map = new Map<string, Expense[]>();
+  for (const e of expenses) {
+    const key = e.date.slice(0, 7); // "YYYY-MM"
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(e);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, exps]) => {
+      const total = exps.reduce((s, e) => s + e.amount, 0);
+      const catCount: Record<string, number> = {};
+      for (const e of exps) catCount[e.category] = (catCount[e.category] || 0) + e.amount;
+      const topCategory = Object.entries(catCount).sort(([,a],[,b]) => b - a)[0]?.[0] || '';
+      const label = format(parse(key, 'yyyy-MM', new Date()), 'MMMM yyyy');
+      return { key, label, expenses: exps, total, topCategory };
+    });
+}
+
 export default function TransactionsPage() {
-  const [expenses, setExpenses]   = useState<Expense[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId]   = useState<string|null>(null);
-  const [form, setForm]             = useState({ amount:'', category:'', description:'', date:new Date().toISOString().split('T')[0], paymentMethod:'Credit Card' });
-  const [submitting, setSubmitting] = useState(false);
-  
+  const [viewMode, setViewMode]    = useState<'list' | 'monthly'>('list');
+  const [expenses, setExpenses]    = useState<Expense[]>([]);
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);  // for monthly view
+  const [loading, setLoading]      = useState(true);
+  const [dialogOpen, setDialogOpen]  = useState(false);
+  const [editingId, setEditingId]    = useState<string|null>(null);
+  const [form, setForm]              = useState({ amount:'', category:'', description:'', date:new Date().toISOString().split('T')[0], paymentMethod:'Credit Card' });
+  const [submitting, setSubmitting]  = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  
+
   // Advanced filters
-  const [showFilters, setShowFilters]       = useState(false);
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate]     = useState('');
-  const [filterMinAmount, setFilterMinAmount] = useState('');
-  const [filterMaxAmount, setFilterMaxAmount] = useState('');
-  const [filterPayment, setFilterPayment]     = useState('all');
-  const [sortBy, setSortBy]                   = useState('date');
-  const [sortOrder, setSortOrder]             = useState('desc');
-  
+  const [showFilters, setShowFilters]         = useState(false);
+  const [filterStartDate, setFilterStartDate]   = useState('');
+  const [filterEndDate, setFilterEndDate]       = useState('');
+  const [filterMinAmount, setFilterMinAmount]   = useState('');
+  const [filterMaxAmount, setFilterMaxAmount]   = useState('');
+  const [filterPayment, setFilterPayment]       = useState('all');
+  const [sortBy, setSortBy]                     = useState('date');
+  const [sortOrder, setSortOrder]               = useState('desc');
+
   const { toast } = useToast();
   const symbol = useCurrency();
 
-  useEffect(() => { 
-    fetchExpenses(); 
-    const handleRefresh = () => fetchExpenses();
-    window.addEventListener('expenseDataChanged', handleRefresh);
-    return () => window.removeEventListener('expenseDataChanged', handleRefresh);
-  }, [page, search, categoryFilter, filterStartDate, filterEndDate, filterMinAmount, filterMaxAmount, filterPayment, sortBy, sortOrder]);
+  const monthGroups = useMemo(() => groupByMonth(allExpenses), [allExpenses]);
 
+  const toggleMonth = (key: string) => {
+    setExpandedMonths(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  // Fetch paginated list
   const fetchExpenses = async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ page:page.toString(), limit:'10' });
+      const p = new URLSearchParams({ page: page.toString(), limit: '10' });
       if (search) p.append('search', search);
       if (categoryFilter !== 'all') p.append('category', categoryFilter);
       if (filterStartDate) p.append('startDate', filterStartDate);
@@ -66,34 +101,63 @@ export default function TransactionsPage() {
       if (filterPayment !== 'all') p.append('paymentMethod', filterPayment);
       p.append('sortBy', sortBy);
       p.append('sortOrder', sortOrder);
-      
       const res = await fetch(`/api/expenses?${p}`);
       if (res.ok) { const d = await res.json(); setExpenses(d.expenses); setTotalPages(d.totalPages); }
-    } catch(e){ console.error(e); } finally { setLoading(false); }
+    } catch(e) { console.error(e); } finally { setLoading(false); }
   };
+
+  // Fetch ALL expenses for monthly grouping (no limit)
+  const fetchAllExpenses = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/expenses?page=1&limit=10000&sortBy=date&sortOrder=desc');
+      if (res.ok) { const d = await res.json(); setAllExpenses(d.expenses); }
+    } catch(e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'list') {
+      fetchExpenses();
+    } else {
+      fetchAllExpenses();
+    }
+    const handleRefresh = () => viewMode === 'list' ? fetchExpenses() : fetchAllExpenses();
+    window.addEventListener('expenseDataChanged', handleRefresh);
+    return () => window.removeEventListener('expenseDataChanged', handleRefresh);
+  }, [viewMode, page, search, categoryFilter, filterStartDate, filterEndDate, filterMinAmount, filterMaxAmount, filterPayment, sortBy, sortOrder]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true);
     try {
       const url = editingId ? `/api/expenses/${editingId}` : '/api/expenses';
       const m   = editingId ? 'PUT' : 'POST';
-      const r   = await fetch(url, { method:m, headers:{'Content-Type':'application/json'}, body:JSON.stringify({...form, amount:parseFloat(form.amount)}) });
+      const r   = await fetch(url, { method: m, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }) });
       if (r.ok) {
-        toast({ title: editingId?'Transaction updated':'Transaction added', description:`Successfully saved ${form.description}.` });
-        setDialogOpen(false); setForm({ amount:'', category:'', description:'', date:new Date().toISOString().split('T')[0], paymentMethod:'Credit Card' }); setEditingId(null); fetchExpenses();
+        toast({ title: editingId ? 'Transaction updated' : 'Transaction added', description: `Successfully saved ${form.description}.` });
+        setDialogOpen(false);
+        setForm({ amount: '', category: '', description: '', date: new Date().toISOString().split('T')[0], paymentMethod: 'Credit Card' });
+        setEditingId(null);
+        if (viewMode === 'list') fetchExpenses(); else fetchAllExpenses();
       } else {
-         const data = await r.json();
-         toast({ title:'Error', description: data.error||'Failed to save transaction.', variant:'destructive' });
+        const data = await r.json();
+        toast({ title: 'Error', description: data.error || 'Failed to save transaction.', variant: 'destructive' });
       }
-    } catch { toast({ title:'Error', description:'Failed to save transaction.', variant:'destructive' }); }
+    } catch { toast({ title: 'Error', description: 'Failed to save transaction.', variant: 'destructive' }); }
     finally { setSubmitting(false); }
   };
 
-  const handleEdit   = (e: Expense) => { setEditingId(e._id); setForm({ amount:e.amount.toString(), category:e.category, description:e.description, date:e.date.split('T')[0], paymentMethod:e.paymentMethod }); setDialogOpen(true); };
+  const handleEdit = (e: Expense) => {
+    setEditingId(e._id);
+    setForm({ amount: e.amount.toString(), category: e.category, description: e.description, date: e.date.split('T')[0], paymentMethod: e.paymentMethod });
+    setDialogOpen(true);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return;
-    try { const r = await fetch(`/api/expenses/${id}`,{method:'DELETE'}); if(r.ok){ toast({title:'Deleted'}); fetchExpenses(); } }
-    catch { toast({title:'Error',description:'Failed to delete.',variant:'destructive'}); }
+    try {
+      const r = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+      if (r.ok) { toast({ title: 'Deleted' }); if (viewMode === 'list') fetchExpenses(); else fetchAllExpenses(); }
+    } catch { toast({ title: 'Error', description: 'Failed to delete.', variant: 'destructive' }); }
   };
 
   return (
@@ -104,13 +168,36 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Transactions</h1>
           <p className="text-slate-500 dark:text-white/40 text-sm mt-0.5">Manage your expense history</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if(!o){setForm({amount:'',category:'',description:'',date:new Date().toISOString().split('T')[0],paymentMethod:'Credit Card'});setEditingId(null);} }}>
-          <DialogTrigger asChild>
-            <button className="h-9 px-4 rounded-xl text-white font-medium text-sm flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 shadow-sm shadow-cyan-500/20 w-fit"
-              style={{ background:'linear-gradient(135deg,#06b6d4,#3b82f6)' }}>
-              <Plus className="w-4 h-4" /> Add Transaction
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Toggle */}
+          <div className="flex items-center rounded-xl border border-slate-200 dark:border-white/[0.1] overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn('flex items-center gap-1.5 px-3 h-9 text-xs font-medium transition-colors',
+                viewMode === 'list'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-white/50 dark:hover:text-white')}
+            >
+              <List className="w-3.5 h-3.5" /> List
             </button>
-          </DialogTrigger>
+            <button
+              onClick={() => setViewMode('monthly')}
+              className={cn('flex items-center gap-1.5 px-3 h-9 text-xs font-medium transition-colors',
+                viewMode === 'monthly'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-white/50 dark:hover:text-white')}
+            >
+              <CalendarDays className="w-3.5 h-3.5" /> Monthly
+            </button>
+          </div>
+
+          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if(!o){setForm({amount:'',category:'',description:'',date:new Date().toISOString().split('T')[0],paymentMethod:'Credit Card'});setEditingId(null);} }}>
+            <DialogTrigger asChild>
+              <button className="h-9 px-4 rounded-xl text-white font-medium text-sm flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 shadow-sm shadow-cyan-500/20 w-fit"
+                style={{ background:'linear-gradient(135deg,#06b6d4,#3b82f6)' }}>
+                <Plus className="w-4 h-4" /> Add Transaction
+              </button>
+            </DialogTrigger>
           <DialogContent className="w-[95vw] sm:w-full max-w-md rounded-2xl border border-slate-200 dark:border-cyan-500/15 shadow-2xl bg-white dark:bg-[#0a1628] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-slate-900 dark:text-white">{editingId?'Edit Transaction':'Add Transaction'}</DialogTitle>
@@ -158,10 +245,107 @@ export default function TransactionsPage() {
                 {editingId?'Save Changes':'Add Transaction'}
               </button>
             </form>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
+      {/* ── MONTHLY VIEW ─────────────────────────────────────────────── */}
+      {viewMode === 'monthly' && (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+            </div>
+          ) : monthGroups.length === 0 ? (
+            <div className="text-center py-20 px-4 rounded-2xl panel bg-white dark:bg-white/[0.03]">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-slate-400 dark:text-white/20" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No transactions yet</h3>
+              <p className="text-slate-500 dark:text-white/40 text-sm">Add your first transaction to see monthly overview.</p>
+            </div>
+          ) : monthGroups.map((group) => {
+            const isOpen = expandedMonths.has(group.key);
+            const TopIcon = CATEGORY_ICONS[group.topCategory as Category] || CATEGORY_ICONS.Other;
+            return (
+              <div key={group.key} className="rounded-2xl overflow-hidden panel bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none">
+                {/* Month Header Card */}
+                <button
+                  onClick={() => toggleMonth(group.key)}
+                  className="w-full text-left"
+                >
+                  <div className="relative p-5 flex items-center justify-between overflow-hidden" style={{ background: 'linear-gradient(135deg,rgba(6,182,212,0.12),rgba(59,130,246,0.08))' }}>
+                    <div className="absolute inset-0 dark:opacity-60" style={{ background: 'linear-gradient(135deg,rgba(6,182,212,0.18),rgba(59,130,246,0.10))' }} />
+                    <div className="relative flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm" style={{ background: 'linear-gradient(135deg,#06b6d4,#3b82f6)' }}>
+                        <CalendarDays className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-base font-bold text-slate-900 dark:text-white">{group.label}</p>
+                        <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5">{group.expenses.length} transaction{group.expenses.length !== 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                    <div className="relative flex items-center gap-6">
+                      <div className="hidden sm:block text-right">
+                        <p className="text-[10px] text-slate-500 dark:text-white/40 uppercase tracking-wider mb-0.5">Top Category</p>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <div className={`w-5 h-5 rounded-md ${CATEGORY_COLORS[group.topCategory as Category] || 'bg-slate-400'} flex items-center justify-center`}>
+                            <TopIcon className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-xs font-medium text-slate-700 dark:text-white/70">{group.topCategory}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-500 dark:text-white/40 uppercase tracking-wider mb-0.5">Total Spent</p>
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{symbol}{group.total.toFixed(2)}</p>
+                      </div>
+                      <div className="text-slate-400 dark:text-white/30">
+                        {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Transactions list */}
+                {isOpen && (
+                  <div className="divide-y divide-slate-100 dark:divide-white/[0.04] animate-fade-in-up">
+                    {group.expenses.map((e) => {
+                      const Icon = CATEGORY_ICONS[e.category as Category] || CATEGORY_ICONS.Other;
+                      return (
+                        <div key={e._id} className="px-5 py-3 flex items-center gap-3.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                          <div className={`w-9 h-9 rounded-xl ${CATEGORY_COLORS[e.category as Category] || 'bg-slate-400'} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                            <Icon className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white/90 truncate">{e.description}</p>
+                            <p className="text-[11px] text-slate-500 dark:text-white/40">{format(new Date(e.date), 'MMM d, yyyy')} · {e.paymentMethod}</p>
+                          </div>
+                          <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-white/50">{e.category}</span>
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm whitespace-nowrap">{symbol}{e.amount.toFixed(2)}</p>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(e)} className="h-7 w-7 text-slate-400 hover:text-slate-700 dark:text-white/30 dark:hover:text-white dark:hover:bg-white/[0.06] rounded-md"><Edit className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(e._id)} className="h-7 w-7 text-slate-400 hover:text-rose-600 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10 rounded-md"><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Month Footer */}
+                    <div className="px-5 py-2.5 bg-slate-50 dark:bg-white/[0.02] flex items-center justify-between">
+                      <span className="text-xs text-slate-400 dark:text-white/30 flex items-center gap-1.5"><TrendingDown className="w-3.5 h-3.5" />{group.expenses.length} transactions</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-white/70">Total: {symbol}{group.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── LIST VIEW ────────────────────────────────────────────────── */}
+      {viewMode === 'list' && (
+        <>
       {/* Filters Area */}
       <div className="flex flex-col gap-3 panel p-3 rounded-2xl shadow-sm dark:shadow-none bg-white dark:bg-white/[0.03]">
         {/* Top Row: Search & Category */}
@@ -360,6 +544,8 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
