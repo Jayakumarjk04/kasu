@@ -13,11 +13,16 @@ import { useTheme } from 'next-themes';
 
 interface Analytics {
   totalSpending: number;
+  totalIncome: number;
+  netBalance: number;
   categoryBreakdown: Array<{ category:string; total:number; count:number; percentage:number }>;
-  monthlyTrend: Array<{ month:string; total:number; count:number }>;
+  monthlyTrend: Array<{ month:string; spending:number; income:number }>;
   recentExpenses: Array<{ _id:string; amount:number; category:string; description:string; date:string }>;
   budgetStatus: Array<{ category:string; budgetAmount:number; spent:number; remaining:number; percentage:number }>;
+  topGoal: { title: string; currentAmount: number; targetAmount: number; color: string; icon: string; } | null;
 }
+
+import * as LucideIcons from 'lucide-react';
 
 const CHART_COLORS = ['#06b6d4','#3b82f6','#8b5cf6','#10b981','#f59e0b','#f43f5e','#ec4899','#84cc16','#06b6d4','#6366f1'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -57,10 +62,10 @@ export default function DashboardPage() {
   const avg = analytics ? analytics.totalSpending / (period==='week'?7:period==='month'?30:365) : 0;
 
   const stats = [
-    { label:'Total Spending',   value:`${symbol}${analytics?.totalSpending.toFixed(2)?? '0.00'}`, icon:DollarSign, cls:'stat-cyan',    ic:'text-cyan-600 dark:text-cyan-400',       ib:'bg-cyan-100 dark:bg-cyan-500/15' },
-    { label:'Daily Average',    value:`${symbol}${avg.toFixed(2)}`,                                icon:TrendingUp,  cls:'stat-blue',    ic:'text-blue-600 dark:text-blue-400',       ib:'bg-blue-100 dark:bg-blue-500/15' },
-    { label:'Transactions',     value:analytics?.categoryBreakdown.reduce((s,c)=>s+c.count,0)??0,  icon:Wallet,      cls:'stat-emerald', ic:'text-emerald-600 dark:text-emerald-400', ib:'bg-emerald-100 dark:bg-emerald-500/15' },
-    { label:'Top Category',     value:analytics?.categoryBreakdown[0]?.category??'N/A',             icon:BarChart2,   cls:'stat-amber',   ic:'text-amber-600 dark:text-amber-400',     ib:'bg-amber-100 dark:bg-amber-500/15', sm:true },
+    { label:'Net Balance',      value:`${symbol}${analytics?.netBalance.toFixed(2)?? '0.00'}`,     icon:Wallet,      cls:'stat-amber',    ic:'text-amber-600 dark:text-amber-400',       ib:'bg-amber-100 dark:bg-amber-500/15' },
+    { label:'Total Income',     value:`${symbol}${analytics?.totalIncome.toFixed(2)?? '0.00'}`,    icon:TrendingUp,  cls:'stat-emerald', ic:'text-emerald-600 dark:text-emerald-400', ib:'bg-emerald-100 dark:bg-emerald-500/15' },
+    { label:'Total Spending',   value:`${symbol}${analytics?.totalSpending.toFixed(2)?? '0.00'}`,  icon:ArrowDownRight, cls:'stat-rose', ic:'text-rose-600 dark:text-rose-400', ib:'bg-rose-100 dark:bg-rose-500/15' },
+    { label:'Daily Avg Spent',  value:`${symbol}${avg.toFixed(2)}`,                                icon:BarChart2,   cls:'stat-blue',    ic:'text-blue-600 dark:text-blue-400',       ib:'bg-blue-100 dark:bg-blue-500/15' },
   ];
 
   return (
@@ -89,7 +94,7 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-slate-500 dark:text-white/40 font-medium mb-1 uppercase tracking-wider">{s.label}</p>
-                <p className={`font-bold text-slate-900 dark:text-white ${s.sm?'text-lg truncate max-w-[140px]':'text-2xl'}`}>{String(s.value)}</p>
+                <p className={`font-bold text-slate-900 dark:text-white text-2xl`}>{String(s.value)}</p>
               </div>
               <div className={`w-11 h-11 rounded-full flex items-center justify-center ${s.ib}`}>
                 <s.icon className={`w-5 h-5 ${s.ic}`} />
@@ -98,6 +103,42 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Top Goal Widget */}
+      {analytics?.topGoal && (() => {
+        const g = analytics.topGoal;
+        const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100));
+        const GoalIcon = (LucideIcons as any)[g.icon] || BarChart2;
+        return (
+          <div className="rounded-2xl p-5 panel bg-slate-900 border-0 flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+            <div className="flex items-center gap-4 relative z-10 w-full md:w-auto">
+              <div className={`w-12 h-12 rounded-2xl ${g.color} flex items-center justify-center flex-shrink-0 shadow-lg shadow-black/20`}>
+                <GoalIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-1">Top Active Goal</p>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-lg font-bold text-white">{g.title}</h3>
+                  <span className="text-sm font-medium text-white/70">
+                    ({pct}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 max-w-md w-full relative z-10">
+              <div className="flex items-center justify-between text-sm font-medium text-white/70 mb-2">
+                <span>{symbol}{g.currentAmount.toFixed(0)} saved</span>
+                <span>{symbol}{g.targetAmount.toFixed(0)} target</span>
+              </div>
+              <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
+                <div className={`h-full ${g.color} transition-all duration-1000`} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -137,9 +178,13 @@ export default function DashboardPage() {
                   <XAxis dataKey="month" stroke="transparent" tick={{ fill: axisColor, fontSize:11 }}
                     tickFormatter={(v) => { const[,m]=v.split('-'); return MONTHS[parseInt(m)-1]; }} />
                   <YAxis stroke="transparent" tick={{ fill: axisColor, fontSize:11 }} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }} formatter={(v:number) => [`${symbol}${v.toFixed(2)}`,'Spending']} />
-                  <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" /><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.7} /></linearGradient></defs>
-                  <Bar dataKey="total" radius={[4,4,0,0]} fill="url(#cg)" />
+                  <Tooltip contentStyle={TT} cursor={{ fill: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }} />
+                  <defs>
+                    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" /><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.7} /></linearGradient>
+                    <linearGradient id="ig" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#059669" stopOpacity={0.7} /></linearGradient>
+                  </defs>
+                  <Bar dataKey="spending" name="Spending" radius={[4,4,0,0]} fill="url(#cg)" />
+                  <Bar dataKey="income" name="Income" radius={[4,4,0,0]} fill="url(#ig)" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

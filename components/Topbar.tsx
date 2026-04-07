@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, Settings, Sparkles, LayoutDashboard, Receipt, PieChart, Wallet, Menu, X } from 'lucide-react';
+import { LogOut, Settings, Sparkles, LayoutDashboard, Receipt, PieChart, Wallet, Menu, X, Zap, Target } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -15,9 +15,11 @@ import { ThemeToggle } from './ThemeToggle';
 
 const navItems = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/income',       label: 'Income',       icon: Zap },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
   { href: '/analytics',    label: 'Analytics',    icon: PieChart },
   { href: '/budgets',      label: 'Budgets',      icon: Wallet },
+  { href: '/goals',        label: 'Goals',        icon: Target },
   { href: '/settings',     label: 'Settings',     icon: Settings },
 ];
 

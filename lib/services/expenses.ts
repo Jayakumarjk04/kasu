@@ -1,6 +1,8 @@
 import { connectDB } from '../db';
 import { Expense, IExpense } from '../models/Expense';
 import { Budget } from '../models/Budget';
+import { Income } from '../models/Income';
+import { Goal } from '../models/Goal';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear, subMonths, parseISO } from 'date-fns';
 import mongoose from 'mongoose';
 
@@ -136,11 +138,36 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
 
   // ── Monthly trend (last 6 months) ──────────────────────────────────────────
   const sixMonthsAgo = subMonths(now, 6);
-  const monthlyTrend = await Expense.aggregate([
+  const spendingMonthlyTrendRaw = await Expense.aggregate([
     { $match: { user: userObjectId, date: { $gte: sixMonthsAgo } } },
-    { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$amount' }, count: { $sum: 1 } } },
-    { $sort: { '_id.year': 1, '_id.month': 1 } },
+    { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$amount' } } }
   ]);
+
+  const incomeMonthlyTrendRaw = await Income.aggregate([
+    { $match: { user: userObjectId, date: { $gte: sixMonthsAgo } } },
+    { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$amount' } } }
+  ]);
+
+  // Combine spending and income trends into a dictionary
+  const trendMap = new Map<string, { spending: number; income: number }>();
+  
+  for (const s of spendingMonthlyTrendRaw) {
+    const key = `${s._id.year}-${String(s._id.month).padStart(2, '0')}`;
+    trendMap.set(key, { spending: s.total, income: 0 });
+  }
+  
+  for (const i of incomeMonthlyTrendRaw) {
+    const key = `${i._id.year}-${String(i._id.month).padStart(2, '0')}`;
+    if (trendMap.has(key)) {
+      trendMap.get(key)!.income = i.total;
+    } else {
+      trendMap.set(key, { spending: 0, income: i.total });
+    }
+  }
+
+  const monthlyTrend = Array.from(trendMap.entries())
+    .map(([month, data]) => ({ month, spending: data.spending, income: data.income }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 
   // ── Recent expenses ────────────────────────────────────────────────────────
   const recentExpenses = await Expense.find({ user: userObjectId }).sort({ date: -1 }).limit(5);
@@ -173,6 +200,27 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
   ]);
   const prevPeriodSpending = prevResult[0]?.total || 0;
 
+  // ── Income Analytics ───────────────────────────────────────────────────────
+  const incomeResult = await Income.aggregate([
+    { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const totalIncome = incomeResult[0]?.total || 0;
+
+  const prevIncomeResult = await Income.aggregate([
+    { $match: { user: userObjectId, date: { $gte: prevStart, $lte: prevEnd } } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const prevPeriodIncome = prevIncomeResult[0]?.total || 0;
+
+  const incomeSourceBreakdown = await Income.aggregate([
+    { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
+    { $group: { _id: '$source', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    { $sort: { total: -1 } },
+  ]);
+
+  const netBalance = totalIncome - totalSpending;
+
   // ── Payment method breakdown ───────────────────────────────────────────────
   const paymentMethodRaw = await Expense.aggregate([
     { $match: { user: userObjectId, date: { $gte: startDate, $lte: endDate } } },
@@ -204,9 +252,15 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
   const dayCount = Math.max(1, Math.round(periodMs / 86400000));
   const dailyAverage = totalSpending / dayCount;
 
+  // ── Top Active Goal ────────────────────────────────────────────────────────
+  const topGoal = await Goal.findOne({ user: userObjectId, status: 'active' }).sort({ targetAmount: -1 }).lean();
+
   return {
     totalSpending,
     prevPeriodSpending,
+    totalIncome,
+    prevPeriodIncome,
+    netBalance,
     avgPerTransaction,
     dailyAverage,
     categoryBreakdown: categoryBreakdown.map(cat => ({
@@ -215,11 +269,13 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
       count: cat.count,
       percentage: Math.round((cat.total / totalSpending) * 100) || 0,
     })),
-    monthlyTrend: monthlyTrend.map(item => ({
-      month: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
-      total: item.total,
-      count: item.count,
+    incomeSourceBreakdown: incomeSourceBreakdown.map(src => ({
+      source: src._id,
+      total: src.total,
+      count: src.count,
+      percentage: Math.round((src.total / totalIncome) * 100) || 0,
     })),
+    monthlyTrend,
     paymentMethodBreakdown: paymentMethodRaw.map(p => ({
       method: p._id,
       total: p.total,
@@ -231,6 +287,13 @@ export async function getAnalytics(userId: string, period: 'week' | 'month' | 'y
     recentExpenses,
     budgetStatus,
     period,
+    topGoal: topGoal ? {
+      title: topGoal.title,
+      targetAmount: topGoal.targetAmount,
+      currentAmount: topGoal.currentAmount,
+      color: topGoal.color,
+      icon: topGoal.icon
+    } : null
   };
 }
 

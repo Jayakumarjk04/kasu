@@ -13,6 +13,12 @@ import {
   TrendingUp,
   HelpCircle,
   LucideIcon,
+  Briefcase,
+  Laptop,
+  TrendingDown,
+  Gift,
+  Key,
+  Zap,
 } from 'lucide-react';
 
 export const CATEGORIES = [
@@ -62,6 +68,38 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   'Groceries': 'bg-green-500',
   'Subscriptions': 'bg-violet-500',
   'Investment': 'bg-emerald-500',
+  'Other': 'bg-gray-500',
+};
+
+export const INCOME_SOURCES = [
+  'Salary',
+  'Freelance',
+  'Investments',
+  'Business',
+  'Gifts',
+  'Rental',
+  'Other',
+] as const;
+
+export type IncomeSource = typeof INCOME_SOURCES[number];
+
+export const INCOME_SOURCE_ICONS: Record<IncomeSource, LucideIcon> = {
+  'Salary': Briefcase,
+  'Freelance': Laptop,
+  'Investments': TrendingUp,
+  'Business': Zap,
+  'Gifts': Gift,
+  'Rental': Key,
+  'Other': HelpCircle,
+};
+
+export const INCOME_SOURCE_COLORS: Record<IncomeSource, string> = {
+  'Salary': 'bg-emerald-500',
+  'Freelance': 'bg-blue-500',
+  'Investments': 'bg-violet-500',
+  'Business': 'bg-amber-500',
+  'Gifts': 'bg-pink-500',
+  'Rental': 'bg-indigo-500',
   'Other': 'bg-gray-500',
 };
 

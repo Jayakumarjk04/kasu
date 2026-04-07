@@ -15,10 +15,14 @@ import { CATEGORY_COLORS, CATEGORY_ICONS, Category } from '@/lib/categories';
 interface Analytics {
   totalSpending: number;
   prevPeriodSpending: number;
+  totalIncome: number;
+  prevPeriodIncome: number;
+  netBalance: number;
   avgPerTransaction: number;
   dailyAverage: number;
   categoryBreakdown: Array<{ category: string; total: number; count: number; percentage: number }>;
-  monthlyTrend: Array<{ month: string; total: number; count: number }>;
+  incomeSourceBreakdown: Array<{ source: string; total: number; count: number; percentage: number }>;
+  monthlyTrend: Array<{ month: string; spending: number; income: number }>;
   paymentMethodBreakdown: Array<{ method: string; total: number; count: number; percentage: number }>;
   weekdayPattern: Array<{ day: string; total: number; count: number }>;
   topExpenses: Array<{ _id: string; amount: number; category: string; description: string; date: string; paymentMethod: string }>;
@@ -84,34 +88,34 @@ export default function AnalyticsPage() {
 
   const kpiCards = [
     {
-      label: `Total Spent`,
+      label: `Net Balance`,
       sub: periodLabel,
-      value: `${symbol}${(analytics?.totalSpending ?? 0).toFixed(2)}`,
+      value: `${symbol}${(analytics?.netBalance ?? 0).toFixed(2)}`,
       icon: DollarSign,
-      accent: 'stat-cyan',
-      ic: 'text-cyan-600 dark:text-cyan-400',
-      ib: 'bg-cyan-100 dark:bg-cyan-500/15',
-      badge: <ChgBadge curr={analytics?.totalSpending ?? 0} prev={analytics?.prevPeriodSpending ?? 0} />,
+      accent: 'stat-amber',
+      ic: 'text-amber-600 dark:text-amber-400',
+      ib: 'bg-amber-100 dark:bg-amber-500/15',
+      badge: <ChgBadge curr={analytics?.netBalance ?? 0} prev={(analytics?.prevPeriodIncome ?? 0) - (analytics?.prevPeriodSpending ?? 0)} />,
     },
     {
-      label: 'Daily Average',
-      sub: 'per day',
-      value: `${symbol}${(analytics?.dailyAverage ?? 0).toFixed(2)}`,
+      label: `Total Income`,
+      sub: periodLabel,
+      value: `${symbol}${(analytics?.totalIncome ?? 0).toFixed(2)}`,
       icon: TrendingUp,
-      accent: 'stat-blue',
-      ic: 'text-blue-600 dark:text-blue-400',
-      ib: 'bg-blue-100 dark:bg-blue-500/15',
-      badge: <span className="text-xs text-slate-400 dark:text-white/30">{txCount} transactions</span>,
-    },
-    {
-      label: 'Avg per Transaction',
-      sub: 'per expense',
-      value: `${symbol}${(analytics?.avgPerTransaction ?? 0).toFixed(2)}`,
-      icon: Activity,
       accent: 'stat-emerald',
       ic: 'text-emerald-600 dark:text-emerald-400',
       ib: 'bg-emerald-100 dark:bg-emerald-500/15',
-      badge: <span className="text-xs text-slate-400 dark:text-white/30">{analytics?.categoryBreakdown.length ?? 0} categories</span>,
+      badge: <ChgBadge curr={analytics?.totalIncome ?? 0} prev={analytics?.prevPeriodIncome ?? 0} />,
+    },
+    {
+      label: `Total Spent`,
+      sub: periodLabel,
+      value: `${symbol}${(analytics?.totalSpending ?? 0).toFixed(2)}`,
+      icon: TrendingDown,
+      accent: 'stat-rose',
+      ic: 'text-rose-600 dark:text-rose-400',
+      ib: 'bg-rose-100 dark:bg-rose-500/15',
+      badge: <ChgBadge curr={analytics?.totalSpending ?? 0} prev={analytics?.prevPeriodSpending ?? 0} />,
     },
     {
       label: 'Busiest Day',
@@ -163,49 +167,72 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* Spending Trend — Area Chart */}
+      {/* Income vs Spending Trend — Stacked/Dual Bar Chart */}
       <div className="rounded-2xl p-5 panel">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Spending Trend</h3>
-            <p className="text-xs text-slate-400 dark:text-white/30 mt-0.5">Last 6 months</p>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Cash Flow Trend</h3>
+            <p className="text-xs text-slate-400 dark:text-white/30 mt-0.5">Income vs Spending (Last 6 months)</p>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/30">
-            <span className="w-3 h-0.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 inline-block" />
-            Total spending
+          <div className="flex items-center gap-3 text-xs font-semibold">
+            <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span className="text-emerald-700 dark:text-emerald-400">Income</span></div>
+            <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-cyan-500" /><span className="text-cyan-700 dark:text-cyan-400">Spending</span></div>
           </div>
         </div>
         {analytics?.monthlyTrend.length ? (
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.monthlyTrend}>
+              <BarChart data={analytics.monthlyTrend} barGap={4}>
                 <defs>
-                  <linearGradient id="areaG" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06b6d4" stopOpacity={isDark ? 0.35 : 0.2} />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="lineG" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#06b6d4" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
+                  <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" /><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.8} /></linearGradient>
+                  <linearGradient id="ig" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#059669" stopOpacity={0.8} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                 <XAxis dataKey="month" stroke="transparent" tick={{ fill: axisColor, fontSize: 11 }} dy={10}
                   tickFormatter={(v) => { const [, m] = v.split('-'); return MONTHS[parseInt(m) - 1]; }} />
                 <YAxis stroke="transparent" tick={{ fill: axisColor, fontSize: 11 }} dx={-10}
                   tickFormatter={(v) => `${symbol}${v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}`} />
-                <Tooltip contentStyle={TT} formatter={(v: number) => [`${symbol}${v.toFixed(2)}`, 'Spending']}
-                  labelFormatter={(v) => { const [, m] = v.split('-'); return MONTHS[parseInt(m) - 1]; }} />
-                <Area type="monotone" dataKey="total" stroke="url(#lineG)" strokeWidth={3}
-                  fill="url(#areaG)" dot={{ fill: '#06b6d4', r: 4, strokeWidth: 0 }} activeDot={{ r: 6, fill: '#22d3ee' }} />
-              </AreaChart>
+                <Tooltip contentStyle={TT} formatter={(v: number) => [`${symbol}${v.toFixed(2)}`]}
+                  labelFormatter={(v) => { const [, m] = v.split('-'); return MONTHS[parseInt(m) - 1]; }} cursor={{ fill: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }} />
+                <Bar dataKey="income" name="Income" radius={[4, 4, 0, 0]} fill="url(#ig)" maxBarSize={40} />
+                <Bar dataKey="spending" name="Spending" radius={[4, 4, 0, 0]} fill="url(#cg)" maxBarSize={40} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         ) : <div className="h-72 flex items-center justify-center text-slate-400 dark:text-white/30 text-sm">No trend data available</div>}
       </div>
 
-      {/* Category Distribution + Progress Bars */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Income Source Donut */}
+        <div className="rounded-2xl p-5 panel">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1">Income Sources</h3>
+          <p className="text-xs text-slate-400 dark:text-white/30 mb-4">{periodLabel}</p>
+          {analytics?.incomeSourceBreakdown.length ? (
+            <>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={analytics.incomeSourceBreakdown} dataKey="total" nameKey="source"
+                      cx="50%" cy="50%" outerRadius={90} innerRadius={48} paddingAngle={2}>
+                      {analytics.incomeSourceBreakdown.map((_, i) => <Cell key={i} fill={COLORS[(i + 4) % COLORS.length]} stroke="transparent" />)}
+                    </Pie>
+                    <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${symbol}${v.toFixed(2)}`, n]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {analytics.incomeSourceBreakdown.slice(0, 5).map((c, i) => (
+                  <div key={c.source} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[(i + 4) % COLORS.length] }} />
+                    <span className="flex-1 text-slate-600 dark:text-white/60 truncate">{c.source}</span>
+                    <span className="text-slate-500 dark:text-white/40 font-medium">{c.percentage}%</span>
+                    <span className="text-slate-700 dark:text-white/70 font-semibold">{symbol}{c.total.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : <div className="h-72 flex items-center justify-center text-slate-400 dark:text-white/30 text-sm">No data available</div>}
+        </div>
         {/* Donut */}
         <div className="rounded-2xl p-5 panel">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1">Category Distribution</h3>

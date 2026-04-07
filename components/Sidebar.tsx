@@ -11,14 +11,17 @@ import {
   Settings,
   Sparkles,
   Zap,
+  Target,
 } from 'lucide-react';
 import { useCurrency } from '@/lib/context/AuthContext';
 
 const navItems = [
   { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/income',        label: 'Income',       icon: Zap },
   { href: '/transactions',  label: 'Transactions', icon: Receipt },
   { href: '/analytics',     label: 'Analytics',    icon: PieChart },
   { href: '/budgets',       label: 'Budgets',      icon: Wallet },
+  { href: '/goals',         label: 'Goals',        icon: Target },
   { href: '/settings',      label: 'Settings',     icon: Settings },
 ];
 
